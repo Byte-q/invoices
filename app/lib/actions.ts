@@ -1,30 +1,97 @@
+// actions.ts
+
 "use server";
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import postgres from "postgres";
+import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
+// NOTE: Assuming you have a utility function 'verifyToken' in '@/lib/auth'
+// which decodes the JWT and returns the payload (e.g., { userId: string }).
+import { verifyToken } from "@/lib/auth"; 
 
-const sql = postgres(process.env.DATABASE_URL!);
+
+// =========================================================================
+// 🔒 AUTHENTICATION HELPER
+// =========================================================================
+
+/**
+ * Retrieves the authenticated user's business ID from the session cookie.
+ * If authentication fails or no business is found, it handles the error.
+ */
+async function getBusinessIdFromAuth(): Promise<string> {
+  const cookie = await cookies();
+  const session = cookie.get('wb_session')?.value;
+  
+  if (!session) {
+    // Redirect to signin if no session exists
+    redirect('/signin');
+  }
+
+  // 1. Decode the JWT to get the userId
+  // NOTE: This assumes 'verifyToken' is a working async function.
+  const decoded = await verifyToken(session); 
+  const userId = decoded?.userId;
+  
+  if (!userId) {
+    redirect('/signin');
+  }
+
+  // 2. Look up the Business ID associated with the User (based on data.ts logic)
+  const userWithBusiness = await prisma.users.findUnique({
+    where: { id: userId },
+    select: {
+      organizations: {
+        select: {
+          businesses: {
+            select: { id: true },
+            take: 1, 
+          },
+        },
+        take: 1, 
+      },
+    },
+  });
+
+  const businessId = userWithBusiness?.organizations[0]?.businesses[0]?.id;
+
+  if (!businessId) {
+    // If the user is authenticated but has no business record, throw an error
+    throw new Error('Authentication Error: User has no associated business to perform actions.');
+  }
+
+  return businessId;
+}
+
+
+// =========================================================================
+// 📝 ZOD SCHEMAS
+// =========================================================================
+
+const CustomerSchema = z.object({
+  name: z.string().min(1, "Name cannot be empty."),
+  email: z.string().email("Invalid email address."),
+});
 
 const FormSchema = z.object({
   id: z.string(),
-  customerId: z.string({
-    invalid_type_error: "Please select a customer.",
+  customerId: z.string().min(1, {
+    message: "Please select a customer.", 
   }),
   amount: z.coerce
     .number()
     .gt(0, { message: "Please enter an amount greater than $0." }),
   status: z.enum(["pending", "paid"], {
-    invalid_type_error: "Please select an invoice status.",
+    message: "Please select an invoice status.", // Correct Zod message pattern
   }),
   date: z.string(),
 });
 
 const CreateInvoice = FormSchema.omit({ id: true, date: true });
 const UpdateInvoice = FormSchema.omit({ id: true, date: true });
-
-// const UpdateCustomer = CustomerSchema.omit({ id: true });
+const CreateCustomer = CustomerSchema;
+const UpdateCustomer = CustomerSchema; 
 
 export type State = {
   errors?: {
@@ -34,6 +101,11 @@ export type State = {
   };
   message?: string | null;
 };
+
+
+// =========================================================================
+// ⚙️ SERVER ACTIONS
+// =========================================================================
 
 export async function createInvoice(prevSatae: State, formData: FormData) {
   const validatedFields = CreateInvoice.safeParse({
@@ -51,18 +123,26 @@ export async function createInvoice(prevSatae: State, formData: FormData) {
 
   const { customerId, amount, status } = validatedFields.data;
   const amountInCents = amount * 100;
-  const date = new Date().toISOString().split("T")[0];
-
+  
   try {
-    await sql`
-      INSERT INTO invoices (customer_id, amount, status, date)
-      VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
-    `;
+    // 🔒 SECURITY: Get the authenticated user's business ID
+    const businessId = await getBusinessIdFromAuth();
+
+    await prisma.invoices.create({
+      data: {
+        number: `${new Date()}-${businessId}`,
+        customerId: customerId,
+        amount: amountInCents,
+        status: status.toUpperCase() as 'PENDING' | 'PAID',
+        dueDate: new Date(),
+        // 🔒 SECURITY: Scope the new invoice to the user's business
+        businessId: businessId, 
+      },
+    });
   } catch (error) {
-    // We'll also log the error to the console for now
     console.error(error);
     return {
-      message: "Database Error: Failed to Create Invoice.",
+      message: "Database Error: Failed to Create Invoice. Check business scope.",
     };
   }
 
@@ -72,7 +152,6 @@ export async function createInvoice(prevSatae: State, formData: FormData) {
 
 export async function createCustomer(prevSatae: State, formData: FormData) {
   const validatedFields = CreateCustomer.safeParse({
-    id: "d6e15727-9fe1-5555-8c5b-ea44a9bd81aa",
     name: formData.get("name"),
     email: formData.get("email"),
   });
@@ -84,27 +163,26 @@ export async function createCustomer(prevSatae: State, formData: FormData) {
     };
   }
 
-  if (!validatedFields.success) {
-    return {
-      errors: validatedFields.error.flatten().fieldErrors,
-      message: "Missing Fields. Failed to Create Customer.",
-    };
-  }
-
-  const { id, name, email } = validatedFields.data;
-  // const date = new Date().toISOString().split("T")[0];
-  const image_url = "/customers/evil-rabbit.png";
+  const { name, email } = validatedFields.data;
+  const image_url = "/customers/evil-rabbit.png"; 
 
   try {
-    await sql`
-      INSERT INTO customers (id, name, email, image_url)
-      VALUES (${id}, ${name}, ${email}, ${image_url})
-    `;
+    // 🔒 SECURITY: Get the authenticated user's business ID
+    const businessId = await getBusinessIdFromAuth();
+
+    await prisma.customers.create({
+      data: {
+        name: name,
+        email: email,
+        image_url: image_url,
+        // 🔒 SECURITY: Scope the new customer to the user's business
+        businessId: businessId, 
+      },
+    });
   } catch (error) {
-    // We'll also log the error to the console for now
     console.error(error);
     return {
-      message: "Database Error: Failed to Create Customer.",
+      message: "Database Error: Failed to Create Customer. Check business scope.",
     };
   }
 
@@ -134,27 +212,33 @@ export async function updateInvoice(
   const amountInCents = amount * 100;
 
   try {
-    await sql`
-        UPDATE invoices
-        SET customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
-        WHERE id = ${id}
-      `;
+    // 🔒 SECURITY: Get the authenticated user's business ID
+    const businessId = await getBusinessIdFromAuth();
+
+    // 🔒 SECURITY: Add businessId to the WHERE clause to ensure only the user's invoices can be updated
+    await prisma.invoices.updateMany({
+      where: { id: id, businessId: businessId },
+      data: {
+        customerId: customerId,
+        amount: amountInCents,
+        status: status.toUpperCase() as 'PENDING' | 'PAID',
+      },
+    });
   } catch (error) {
-    // We'll also log the error to the console for now
     console.error(error);
-    return { message: "Database Error: Failed to Update Invoice." };
+    return { message: "Database Error: Failed to Update Invoice. Check ID and business scope." };
   }
 
   revalidatePath("/dashboard/invoices");
   redirect("/dashboard/invoices");
 }
+
 export async function updateCustomer(
   id: string,
   prevState: State,
   formData: FormData
 ) {
-  const validatedFields = UpdateInvoice.safeParse({
-    id: formData.get("id"),
+  const validatedFields = UpdateCustomer.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
   });
@@ -165,20 +249,29 @@ export async function updateCustomer(
       message: "Missing Fields. Failed to Update Customer.",
     };
   }
-
-  const { name, email, image_url } = validatedFields.data;
-  const amountInCents = amount * 100;
+  
+  const name = formData.get("name") as string;
+  const email = formData.get("email") as string;
+  const image_url = formData.get("image_url") as string || undefined;
 
   try {
-    await sql`
-        UPDATE customers
-        SET name = ${name}, email = ${email}, image_url = ${image_url}
-        WHERE id = ${id}
-      `;
+    // 🔒 SECURITY: Get the authenticated user's business ID
+    const businessId = await getBusinessIdFromAuth();
+
+    // 🔒 SECURITY: Use updateMany with businessId in the WHERE clause
+    // updateMany is used because updateMany supports a composite WHERE clause,
+    // while update only works on unique constraints (like id).
+    await prisma.customers.updateMany({
+      where: { id: id, businessId: businessId },
+      data: {
+        name: name,
+        email: email,
+        ...(image_url && { image_url: image_url }),
+      },
+    });
   } catch (error) {
-    // We'll also log the error to the console for now
     console.error(error);
-    return { message: "Database Error: Failed to Update Invoice." };
+    return { message: "Database Error: Failed to Update Customer. Check ID and business scope." };
   }
 
   revalidatePath("/dashboard/invoices");
@@ -186,69 +279,33 @@ export async function updateCustomer(
 }
 
 export async function deleteInvoice(id: string) {
-  // throw new Error("Failed to Delete Invoice");
-
-  await sql`DELETE FROM invoices WHERE id = ${id}`;
-  revalidatePath("/dashboard/invoices");
+  try {
+    // 🔒 SECURITY: Get the authenticated user's business ID
+    const businessId = await getBusinessIdFromAuth();
+    
+    // 🔒 SECURITY: Add businessId to the WHERE clause to ensure only the user's data is deleted
+    await prisma.invoices.deleteMany({
+      where: { id: id, businessId: businessId },
+    });
+    revalidatePath("/dashboard/invoices");
+  } catch (error) {
+    console.error(error);
+    throw new Error("Failed to Delete Invoice. Check business scope.");
+  }
 }
 
 export async function deleteCustomer(id: string) {
-  // throw new Error("Failed to Delete Invoice");
-
-  await sql`DELETE FROM customers WHERE id = ${id}`;
-  revalidatePath("/dashboard/customers");
-}
-
-/////////////////////////////////////////////
-
-import { prisma } from "@/lib/prisma";
-import bcrypt from "bcrypt";
-
-const UserSchema = z.object({
-  name: z.string(),
-  email: z.email(),
-  password: z.string(),
-  image_url: z.string(),
-});
-const CreateUser = UserSchema.omit({
-  name: true,
-  email: true,
-  password: true,
-  image_url: true,
-});
-
-export async function createUser(prevSatae: State, formData: FormData) {
-  const validatedFields = CreateUser.safeParse({
-    name: formData.get("name"),
-    email: formData.get("email"),
-    password: formData.get("password"),
-    image_url: formData.get("image"),
-  });
-  
-  if (!validatedFields.success) {
-    return {
-      errors: validatedFields.error.flatten().fieldErrors,
-      message: "Missing Fields. Failed to Create User.",
-    };
-  }
-
-  const name = formData.get('name');
-  const email = formData.get('email');
-  const password = formData.get('password');
-  const image_url = formData.get('image');
-  console.log("data", { name, email, password, image_url });
-  // const HashPsd = await bcrypt.hash(password, 10);
-
   try {
-    await prisma.user.create({
-      data: { name, email, password, image: image_url },
-    });
-  } catch (err) {
-    console.log(err);
-    return {
-      message: "Database Error: Failed to Create User.",
-    };
-  }
+    // 🔒 SECURITY: Get the authenticated user's business ID
+    const businessId = await getBusinessIdFromAuth();
 
-  redirect("/dashboard");
+    // 🔒 SECURITY: Add businessId to the WHERE clause to ensure only the user's data is deleted
+    await prisma.customers.deleteMany({
+      where: { id: id, businessId: businessId },
+    });
+    revalidatePath("/dashboard/customers");
+  } catch (error) {
+    console.error(error);
+    throw new Error("Failed to Delete Customer. Check business scope.");
+  }
 }

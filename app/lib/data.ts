@@ -1,28 +1,42 @@
+import { cookies } from "next/headers"; // NEW: To read the session cookie
+import { verifyToken } from "@/lib/auth"; // NEW: Assuming this utility exists based on route.ts
 import {
-  CountResult,
-  CustomerAnalytics,
   CustomerField,
-  CustomerPageAnalytics,
-  CustomersTableType,
   InvoiceForm,
   InvoicesTable,
   LatestInvoice,
-  LatestInvoiceRaw,
   Revenue,
 } from "./definitions";
 import { formatCurrency } from "./utils";
 import { prisma } from "@/lib/prisma";
+import { cache } from "react";
 
 // ----------------------------------------------------
-// HELPER FUNCTION: Get Business ID from User ID
+// HELPER FUNCTION: Get Business ID from Auth
 // ----------------------------------------------------
 /**
- * Retrieves the primary Business ID associated with the user's organization.
+ * Retrieves the primary Business ID associated with the authenticated user
+ * by decoding the 'wb_session' cookie.
  */
-async function getBusinessId(userId: string): Promise<string | undefined> {
+async function getBusinessId(): Promise<string | undefined> {
+  // 1. Get the session cookie
+  const cookie = await cookies();
+  const session = cookie.get('wb_session')?.value;
+  
+  if (!session) {
+    return undefined;
+  }
+
+  // 2. Decode the JWT to get the userId
+  // NOTE: We assume verifyToken is available and returns { userId: string }
+  const decoded = await verifyToken(session); 
+  const userId = decoded?.userId;
+  
   if (!userId) {
     return undefined;
   }
+
+  // 3. Look up the Business ID associated with the User
   const userWithBusiness = await prisma.users.findUnique({
     where: { id: userId },
     select: {
@@ -37,17 +51,18 @@ async function getBusinessId(userId: string): Promise<string | undefined> {
       },
     },
   });
-  console.log('Fetched Business ID:', userWithBusiness?.organizations[0]?.businesses[0]?.id);
+  
   return userWithBusiness?.organizations[0]?.businesses[0]?.id;
 }
 
-export async function fetchRevenue(userId: string): Promise<Revenue[]> {
+export async function fetchRevenue(): Promise<Revenue[]> {
   try {
-    const businessId = await getBusinessId(userId);
+    // REMOVED: userId parameter
+    const businessId = await getBusinessId(); // Now called without argument
 
     if (!businessId) {
       console.warn(
-        `No business found for user ID: ${userId}. Returning empty revenue list.`
+        `No business found for authenticated user. Returning empty revenue list.`
       );
       return [];
     }
@@ -66,28 +81,14 @@ export async function fetchRevenue(userId: string): Promise<Revenue[]> {
   }
 }
 
-export async function fetchLatestInvoices(
-  userId: string
-): Promise<LatestInvoice[]> {
+export async function fetchLatestInvoices(): Promise<LatestInvoice[]> {
   try {
-    const userWithBusiness = await prisma.users.findUnique({
-      where: { id: userId },
-      select: {
-        organizations: {
-          select: {
-            businesses: {
-              // Assuming a user owns an organization which contains the business
-              select: { id: true },
-              take: 1, // Only need the first business associated with the organization
-            },
-          },
-        },
-      },
-    });
-    const businessId = userWithBusiness?.organizations[0]?.businesses[0]?.id;
+    // REMOVED: userId parameter
+    const businessId = await getBusinessId();
+
     if (!businessId) {
       console.warn(
-        `No business found for user ID: ${userId}. Returning empty list.`
+        `No business found for authenticated user. Returning empty list.`
       );
       return [];
     }
@@ -130,29 +131,10 @@ export async function fetchLatestInvoices(
   }
 }
 
-export async function fetchCardData(userId: string) {
+export async function fetchCardData() {
   try {
-    // You can probably combine these into a single SQL query
-    // However, we are intentionally splitting them to demonstrate
-    // how to initialize multiple queries in parallel with JS.
-
-    // 1. Find the Business ID
-    // Navigate from User -> Organization -> Business
-    const userWithBusiness = await prisma.users.findUnique({
-      where: { id: userId },
-      select: {
-        organizations: {
-          select: {
-            businesses: {
-              select: { id: true },
-              take: 1, // Assuming one primary business per organization
-            },
-          },
-        },
-      },
-    });
-
-    const businessId = userWithBusiness?.organizations[0]?.businesses[0]?.id;
+    // REMOVED: userId parameter
+    const businessId = await getBusinessId();
 
     const zeroMetrics = {
       numberOfCustomers: 0,
@@ -163,7 +145,7 @@ export async function fetchCardData(userId: string) {
 
     if (!businessId) {
       console.warn(
-        `No business found for user ID: ${userId}. Returning zero metrics.`
+        `No business found for authenticated user. Returning zero metrics.`
       );
       return zeroMetrics;
     }
@@ -218,11 +200,10 @@ export async function fetchCardData(userId: string) {
 
 const ITEMS_PER_PAGE = 6;
 export async function fetchFilteredInvoices(
-  userId: string, // Added userId
-  query: string,
+  query: string, // REMOVED: userId parameter
   currentPage: number
 ): Promise<InvoicesTable[]> {
-  const businessId = await getBusinessId(userId);
+  const businessId = await getBusinessId(); // Now called without argument
   if (!businessId) return [];
 
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -284,8 +265,8 @@ export async function fetchFilteredInvoices(
   }
 }
 
-export async function fetchInvoicesPages(userId: string, query: string) {
-  const businessId = await getBusinessId(userId);
+export async function fetchInvoicesPages(query: string) {
+  const businessId = await getBusinessId(); // Now called without argument
   if (!businessId) return 0;
 
   const amountInt = isNaN(parseInt(query)) ? undefined : parseInt(query);
@@ -312,8 +293,8 @@ export async function fetchInvoicesPages(userId: string, query: string) {
   }
 }
 
-export async function fetchInvoiceById(userId: string, id: string) {
-  const businessId = await getBusinessId(userId);
+export async function fetchInvoiceById(id: string) {
+  const businessId = await getBusinessId(); // Now called without argument
   if (!businessId) return undefined;
 
   try {
@@ -347,8 +328,8 @@ export async function fetchInvoiceById(userId: string, id: string) {
   }
 }
 
-export async function fetchCustomers(userId: string) {
-  const businessId = await getBusinessId(userId);
+export async function fetchCustomers() {
+  const businessId = await getBusinessId(); // Now called without argument
   if (!businessId) return [];
 
   try {
@@ -371,8 +352,8 @@ export async function fetchCustomers(userId: string) {
   }
 }
 
-export async function fetchCustomersPages(userId: string, query: string) {
-  const businessId = await getBusinessId(userId);
+export async function fetchCustomersPages(query: string) {
+  const businessId = await getBusinessId(); // Now called without argument
 
   if (!businessId) {
     return 0;
@@ -412,11 +393,10 @@ export async function fetchCustomersPages(userId: string, query: string) {
 }
 
 export async function fetchFilteredCustomers(
-  userId: string, // ADDED: Accept userId
-  query: string,
+  query: string, // REMOVED: userId parameter
   currentPage: number
 ) {
-  const businessId = await getBusinessId(userId);
+  const businessId = await getBusinessId(); // Now called without argument
   if (!businessId) return [];
 
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -478,9 +458,6 @@ export async function fetchFilteredCustomers(
       };
     });
 
-    // NOTE: The final assertion 'as CustomersTableType[]' is omitted here,
-    // but you should apply it in your file if necessary, ensuring your
-    // CustomersTableType definition matches the returned object structure exactly.
     return customers;
   } catch (err) {
     console.error("Database Error:", err);

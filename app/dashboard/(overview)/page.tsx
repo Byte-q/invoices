@@ -9,24 +9,12 @@ import {
   CardsSkeleton,
 } from "@/app/ui/skeletons";
 import { Metadata } from "next";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Dashboard",
 };
 
-const USER_ID_COOKIE = "userId";
-
 export default async function Page() {
-  const cookieStore = await cookies();
-  const userId = cookieStore.get(USER_ID_COOKIE)?.value;
-  console.log("userId", userId)
-
-  if (!userId) {
-    // If the cookie is missing or invalid, redirect to the login page
-    redirect("/signin");
-  }
 
   return (
     <main className="">
@@ -35,15 +23,15 @@ export default async function Page() {
       </h1>
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <Suspense fallback={<CardsSkeleton />}>
-          <CardWrapper userId={userId} />
+          <CardWrapper />
         </Suspense>
       </div>
       <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-4 lg:grid-cols-8">
         <Suspense fallback={<RevenueChartSkeleton />}>
-          <RevenueChart userId={userId} />
+          <RevenueChart />
         </Suspense>
         <Suspense fallback={<LatestInvoicesSkeleton />}>
-          <LatestInvoices userId={userId} />
+          <LatestInvoices />
         </Suspense>
       </div>
     </main>

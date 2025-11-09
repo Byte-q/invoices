@@ -3,10 +3,6 @@ import { lusitana } from "@/app/ui/fonts";
 import Search from "@/app/ui/search";
 import { fetchFilteredCustomers } from "@/app/lib/data";
 import { CreateCustomer, DeleteCustomer, UpdateCustomer } from "./buttons";
-import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
-
-const USER_ID_COOKIE = "userId";
 
 export default async function CustomersTable({
   query,
@@ -15,14 +11,8 @@ export default async function CustomersTable({
   query: string;
   currentPage: number;
 }) {
-  const cookieStore = await cookies();
-    const userId = cookieStore.get(USER_ID_COOKIE)?.value;
-    if (!userId) {
-      // If the cookie is missing or invalid, redirect to the login page
-      redirect("/signin");
-    }
 
-  const customers = await fetchFilteredCustomers(userId, query, currentPage);
+  const customers = await fetchFilteredCustomers(query, currentPage);
 
   return (
     <div className="w-full">

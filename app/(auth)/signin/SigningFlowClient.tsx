@@ -1,3 +1,5 @@
+'use client'
+
 // app/(auth)/signup/SignupFlowClient.tsx
 import { AnimatePresence, motion } from "motion/react";
 import StepMain from "./steps/main";

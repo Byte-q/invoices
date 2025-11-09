@@ -42,22 +42,13 @@ export async function POST(req: Request) {
 
     const res = NextResponse.json(user);
     
-    // 🛑 FIX 1: Set the main session cookie (wb_session) 🛑
     const sessionCookie = `wb_session=${token}; HttpOnly; Path=/; Expires=${cookieExpires}; SameSite=Lax${
       process.env.NODE_ENV === "production"
         ? `; Secure; Domain=${process.env.COOKIE_DOMAIN}`
         : ""
     }`;
 
-    // 🛑 FIX 2: Use .append() instead of .set() for the subsequent cookie 🛑
-    // This adds the new header value without overwriting the previous one.
     res.headers.append("Set-Cookie", sessionCookie);
-
-    // Append the userId cookie
-    res.headers.append(
-      "Set-Cookie",
-      `userId=${user.id}; Path=/; SameSite=Lax` // Added Path and SameSite for consistency
-    );
 
     return res;
   } catch (err) {

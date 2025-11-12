@@ -3,6 +3,7 @@ import { CalendarIcon } from "@heroicons/react/24/outline";
 import { lusitana } from "@/app/ui/fonts";
 import { Revenue } from "@/app/lib/definitions";
 import { fetchRevenue } from "@/app/lib/data";
+import { months } from "@/app/lib/placeholder-data";
 
 // This component is representational only.
 // For data visualization UI, check out:
@@ -12,14 +13,27 @@ import { fetchRevenue } from "@/app/lib/data";
 
 export default async function RevenueChart() {
   // Make component async, remove the props
-  const revenue = await fetchRevenue(); // Fetch data inside the component
+  let revenue = await fetchRevenue(); // Fetch data inside the component
   const chartHeight = 350;
-  // NOTE: Uncomment this code in Chapter 7
 
-  const { yAxisLabels, topLabel } = generateYAxis(revenue);
+  let yAxisLabels, topLabel;
 
   if (!revenue || revenue.length === 0) {
-    return <p className="mt-4 text-gray-400">No data available.</p>;
+    // 1. Create a placeholder array with 12 months, all revenue set to 0.
+    revenue = Array.from({ length: 12 }, (_, i) => ({
+      month: months[i], // Placeholder month label
+      revenue: 0,
+    }));
+    // 2. Since revenue is 0, we can manually set the topLabel to 0 and yAxisLabels to ['$', '$0'].
+    // Note: If generateYAxis handles a zero input, you could use that instead.
+    // Assuming a simple manual override is needed for the $0 display.
+    topLabel = 2;
+    yAxisLabels = ["$0K", "$0K", "$0K", "$0K", "$0K", "$0K"];
+  } else {
+    // Use the fetched data and generate the axis labels normally
+    const yAxisData = generateYAxis(revenue);
+    yAxisLabels = yAxisData.yAxisLabels;
+    topLabel = yAxisData.topLabel;
   }
 
   return (
@@ -27,7 +41,6 @@ export default async function RevenueChart() {
       <h2 className={`${lusitana.className} mb-4 text-xl md:text-2xl`}>
         Recent Revenue
       </h2>
-      {/* NOTE: Uncomment this code in Chapter 7 */}
 
       <div className="rounded-xl bg-gray-50 dark:bg-gray-600 p-4">
         <div className="sm:grid-cols-13 mt-0 grid grid-cols-12 items-end gap-2 rounded-md bg-white dark:bg-gray-800 p-4 md:gap-4">
@@ -45,7 +58,7 @@ export default async function RevenueChart() {
               <div
                 className="w-full rounded-md bg-blue-300"
                 style={{
-                  height: `${(chartHeight / topLabel) * month.revenue}px`,
+                  height: `${(chartHeight / topLabel) * (month.revenue === 0 ? 1 : month.revenue)}px`,
                 }}
               ></div>
               <p className="-rotate-90 text-sm text-gray-400 dark:text-white sm:rotate-0">

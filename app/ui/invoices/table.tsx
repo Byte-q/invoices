@@ -1,8 +1,12 @@
-import Image from 'next/image';
-import { UpdateInvoice, DeleteInvoice } from '@/app/ui/invoices/buttons';
-import InvoiceStatus from '@/app/ui/invoices/status';
-import { formatDateToLocal, formatCurrency } from '@/app/lib/utils';
-import { fetchFilteredInvoices } from '@/app/lib/data';
+import Image from "next/image";
+import {
+  UpdateInvoice,
+  DeleteInvoice,
+  SendReminderEmail,
+} from "@/app/ui/invoices/buttons";
+import InvoiceStatus from "@/app/ui/invoices/status";
+import { formatDateToLocal, formatCurrency } from "@/app/lib/utils";
+import { fetchFilteredInvoices } from "@/app/lib/data";
 
 export default async function InvoicesTable({
   query,
@@ -35,7 +39,9 @@ export default async function InvoicesTable({
                       />
                       <p>{invoice.name}</p>
                     </div>
-                    <p className="text-sm text-gray-500 dark:text-neutral-300">{invoice.email}</p>
+                    <p className="text-sm text-gray-500 dark:text-neutral-300">
+                      {invoice.email}
+                    </p>
                   </div>
                   <InvoiceStatus status={invoice.status} />
                 </div>
@@ -47,6 +53,9 @@ export default async function InvoicesTable({
                     <p>{formatDateToLocal(invoice.date)}</p>
                   </div>
                   <div className="flex justify-end gap-2">
+                    {invoice.status === "PENDING" && (
+                      <SendReminderEmail id={invoice.id} />
+                    )}
                     <UpdateInvoice id={invoice.id} />
                     <DeleteInvoice id={invoice.id} />
                   </div>
@@ -73,7 +82,10 @@ export default async function InvoicesTable({
                   Status
                 </th>
                 <th scope="col" className="relative py-3 pl-6 pr-3">
-                  <span className="sr-only">Edit</span>
+                  Send Reminder
+                </th>
+                <th scope="col" className="relative py-3 pl-6 pr-3">
+                  Edit
                 </th>
               </tr>
             </thead>
@@ -107,7 +119,12 @@ export default async function InvoicesTable({
                   <td className="whitespace-nowrap px-3 py-3">
                     <InvoiceStatus status={invoice.status} />
                   </td>
-                  <td className="whitespace-nowrap py-3 pl-6 pr-3">
+                  <td className="whitespace-nowrap px-3 py-3 flex items-center justify-center">
+                    {invoice.status === "PENDING" && (
+                      <SendReminderEmail id={invoice.id} />
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap py-3 px-3">
                     <div className="flex justify-end gap-3">
                       <UpdateInvoice id={invoice.id} />
                       <DeleteInvoice id={invoice.id} />

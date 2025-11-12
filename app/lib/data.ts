@@ -10,6 +10,7 @@ import {
 import { formatCurrency } from "./utils";
 import { prisma } from "@/lib/prisma";
 import { cache } from "react";
+import { NextResponse } from "next/server";
 
 // ----------------------------------------------------
 // HELPER FUNCTION: Get Business ID from Auth
@@ -21,17 +22,17 @@ import { cache } from "react";
 async function getBusinessId(): Promise<string | undefined> {
   // 1. Get the session cookie
   const cookie = await cookies();
-  const session = cookie.get('wb_session')?.value;
-  
+  const session = cookie.get("wb_session")?.value;
+
   if (!session) {
     return undefined;
   }
 
   // 2. Decode the JWT to get the userId
   // NOTE: We assume verifyToken is available and returns { userId: string }
-  const decoded = await verifyToken(session); 
+  const decoded = await verifyToken(session);
   const userId = decoded?.userId;
-  
+
   if (!userId) {
     return undefined;
   }
@@ -51,8 +52,53 @@ async function getBusinessId(): Promise<string | undefined> {
       },
     },
   });
-  
+
   return userWithBusiness?.organizations[0]?.businesses[0]?.id;
+}
+
+/**
+ * Retrieves the primary Business ID associated with the authenticated user
+ * by decoding the 'wb_session' cookie.
+ */
+export async function getUserId(): Promise<string | undefined> {
+  // 1. Get the session cookie
+  const cookie = await cookies();
+  const session = cookie.get("wb_session")?.value;
+
+  if (!session) {
+    return undefined;
+  }
+
+  // 2. Decode the JWT to get the userId
+  // NOTE: We assume verifyToken is available and returns { userId: string }
+  const decoded = await verifyToken(session);
+  const userId = decoded?.userId;
+
+  if (!userId) {
+    return undefined;
+  }
+  return userId;
+}
+
+export async function saveEncryptedTokenToDB(userId: string, token: string) {
+  try {
+    await prisma.organizations.update({
+      where: { ownerId: userId },
+      data: { refreshToken: token },
+    });
+    return new NextResponse("successfully stored refreshToken");
+  } catch (err) {
+    console.log("Error Failed to stored refreshToken", err);
+  }
+}
+
+export async function getEncryptedTokenFromDB(userId: string) {
+  const org = await prisma.organizations.findUnique({
+    where: { ownerId: userId },
+  });
+  const encryptedToken = org?.refreshToken;
+  
+  return encryptedToken;
 }
 
 export async function fetchRevenue(): Promise<Revenue[]> {

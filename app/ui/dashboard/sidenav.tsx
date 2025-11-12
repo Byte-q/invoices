@@ -3,6 +3,7 @@ import NavLinks from "@/app/ui/dashboard/nav-links";
 import AcmeLogo from "@/app/ui/acme-logo";
 import { PowerIcon } from "@heroicons/react/24/outline";
 import { ModeToggle } from "@/components/ui/modeToggle";
+import AuthorizationButton from "@/components/getGmailAuth";
 
 export default function SideNav() {
   return (
@@ -19,7 +20,8 @@ export default function SideNav() {
         <NavLinks />
         <div className="hidden h-auto w-full grow rounded-md bg-gray-50 dark:bg-gray-600 md:block"></div>
         <div className="w-full bg-gray-50 dark:bg-gray-600 p-2 rounded-sm">
-          <ModeToggle />
+          {/* <ModeToggle /> */}
+          {/* <AuthorizationButton /> */}
         </div>
       </div>
     </div>

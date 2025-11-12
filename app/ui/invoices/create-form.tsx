@@ -10,13 +10,51 @@ import {
 } from "@heroicons/react/24/outline";
 import { Button } from "@/app/ui/button";
 import { createInvoice, State } from "@/app/lib/actions";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 export default function Form({ customers }: { customers: CustomerField[] }) {
-  const initialState: State = { message: null, errors: {} };
-  const [state, formAction] = useActionState(createInvoice, initialState);
+  // const initialState: State = { message: null, errors: {} };
+  // const [state, formAction] = useActionState(createInvoice, initialState);
+
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const formData = new FormData(e.currentTarget);
+
+    try {
+      const res = await fetch("/api/invoices/create", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Failed to submit");
+      const amount = formData.get("amount");
+      const customerId = formData.get("customerId");
+      console.log(customerId)
+      const customer = customers.map(c => c.id === customerId ? c.name : 'undefiend')
+
+      toast("Invoice created", {
+        description: `Customer: ${customer[0]}, Amount: $${amount}`,
+        action: {
+          label: "View",
+          onClick: () => router.push("/dashboard/invoices"),
+        },
+      });
+    } catch (err) {
+      toast.error("Something went wrong, please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <form action={formAction}>
+    <form onSubmit={handleSubmit}>
       <div className="rounded-md bg-gray-50 dark:bg-gray-600 p-4 md:p-6">
         {/* Customer Name */}
         <div className="mb-4">
@@ -42,14 +80,14 @@ export default function Form({ customers }: { customers: CustomerField[] }) {
             </select>
             <UserCircleIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500" />
           </div>
-          <div id="customer-error" aria-live="polite" aria-atomic="true">
+          {/* <div id="customer-error" aria-live="polite" aria-atomic="true">
             {state.errors?.customerId &&
               state.errors.customerId.map((error: string) => (
                 <p className="mt-2 text-sm text-red-500" key={error}>
                   {error}
                 </p>
               ))}
-          </div>
+          </div> */}
         </div>
 
         {/* Invoice Amount */}
@@ -71,14 +109,14 @@ export default function Form({ customers }: { customers: CustomerField[] }) {
               <CurrencyDollarIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
             </div>
           </div>
-          <div id="amount-error" aria-live="polite" aria-atomic="true">
+          {/* <div id="amount-error" aria-live="polite" aria-atomic="true">
             {state.errors?.amount &&
               state.errors.amount.map((error: string) => (
                 <p className="mt-2 text-sm text-red-500" key={error}>
                   {error}
                 </p>
               ))}
-          </div>
+          </div> */}
         </div>
 
         {/* Invoice Status */}
@@ -121,14 +159,14 @@ export default function Form({ customers }: { customers: CustomerField[] }) {
               </div>
             </div>
           </div>
-          <div id="status-error" aria-live="polite" aria-atomic="true">
+          {/* <div id="status-error" aria-live="polite" aria-atomic="true">
             {state.errors?.status &&
               state.errors.status.map((error: string) => (
                 <p className="mt-2 text-sm text-red-500" key={error}>
                   {error}
                 </p>
               ))}
-          </div>
+          </div> */}
         </fieldset>
       </div>
       <div className="mt-6 flex justify-end gap-4">
@@ -138,7 +176,9 @@ export default function Form({ customers }: { customers: CustomerField[] }) {
         >
           Cancel
         </Link>
-        <Button type="submit">Create Invoice</Button>
+        <Button type="submit" disabled={loading}>
+          {loading ? "Creating..." : "Create"}
+        </Button>
       </div>
     </form>
   );

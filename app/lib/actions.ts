@@ -20,7 +20,7 @@ import { verifyToken } from "@/lib/auth";
  * Retrieves the authenticated user's business ID from the session cookie.
  * If authentication fails or no business is found, it handles the error.
  */
-async function getBusinessIdFromAuth(): Promise<string> {
+export async function getBusinessIdFromAuth(): Promise<string> {
   const cookie = await cookies();
   const session = cookie.get('wb_session')?.value;
   

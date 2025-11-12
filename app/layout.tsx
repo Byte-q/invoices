@@ -6,6 +6,7 @@ import { NextSSRPlugin } from "@uploadthing/react/next-ssr-plugin";
 import { extractRouterConfig } from "uploadthing/server";
 import { ourFileRouter } from "@/app/api/uploadthing/core";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: {
@@ -40,6 +41,7 @@ export default function RootLayout({
             routerConfig={extractRouterConfig(ourFileRouter)}
           />
           {children}
+          <Toaster richColors theme="system" position="top-center" />
         </ThemeProvider>
       </body>
     </html>

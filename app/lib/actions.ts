@@ -107,7 +107,7 @@ export type State = {
 // ⚙️ SERVER ACTIONS
 // =========================================================================
 
-export async function createInvoice(prevSatae: State, formData: FormData) {
+export async function createInvoice(prevSatae: State, formData: FormData, date: Date) {
   const validatedFields = CreateInvoice.safeParse({
     customerId: formData.get("customerId"),
     amount: formData.get("amount"),
@@ -130,11 +130,11 @@ export async function createInvoice(prevSatae: State, formData: FormData) {
 
     await prisma.invoices.create({
       data: {
-        number: `${new Date()}-${businessId}`,
+        number: `${date}-${businessId}`,
         customerId: customerId,
         amount: amountInCents,
         status: status.toUpperCase() as 'PENDING' | 'PAID',
-        dueDate: new Date(),
+        dueDate: date,
         // 🔒 SECURITY: Scope the new invoice to the user's business
         businessId: businessId, 
       },
@@ -216,7 +216,7 @@ export async function updateInvoice(
     const businessId = await getBusinessIdFromAuth();
 
     // 🔒 SECURITY: Add businessId to the WHERE clause to ensure only the user's invoices can be updated
-    await prisma.invoices.updateMany({
+    await prisma.invoices.update({
       where: { id: id, businessId: businessId },
       data: {
         customerId: customerId,

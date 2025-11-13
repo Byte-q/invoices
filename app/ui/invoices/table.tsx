@@ -50,7 +50,7 @@ export default async function InvoicesTable({
                     <p className="text-xl font-medium">
                       {formatCurrency(invoice.amount)}
                     </p>
-                    <p>{formatDateToLocal(invoice.date)}</p>
+                    <p>{formatDateToLocal(invoice.dueDate)}</p>
                   </div>
                   <div className="flex justify-end gap-2">
                     {invoice.status === "PENDING" && (
@@ -76,7 +76,7 @@ export default async function InvoicesTable({
                   Amount
                 </th>
                 <th scope="col" className="px-3 py-5 font-medium">
-                  Date
+                  Due date
                 </th>
                 <th scope="col" className="px-3 py-5 font-medium">
                   Status
@@ -114,13 +114,13 @@ export default async function InvoicesTable({
                     {formatCurrency(invoice.amount)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3">
-                    {formatDateToLocal(invoice.date)}
+                    {formatDateToLocal(invoice.dueDate)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3">
                     <InvoiceStatus status={invoice.status} />
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 flex items-center justify-center">
-                    {invoice.status === "PENDING" && (
+                    {invoice.status === "OVERDUE" && (
                       <SendReminderEmail id={invoice.id} />
                     )}
                   </td>

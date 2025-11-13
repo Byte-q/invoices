@@ -8,10 +8,10 @@ export const formatCurrency = (amount: number) => {
 };
 
 export const formatDateToLocal = (
-  dateStr: string,
+  dueDate: Date,
   locale: string = 'en-US',
 ) => {
-  const date = new Date(dateStr);
+  const date = new Date(dueDate);
   const options: Intl.DateTimeFormatOptions = {
     day: 'numeric',
     month: 'short',
@@ -67,3 +67,31 @@ export const generatePagination = (currentPage: number, totalPages: number) => {
     totalPages,
   ];
 };
+
+// A utility function you can place in a file like 'app/lib/utils.js'
+
+/**
+ * Checks if the invoice due date has passed today's date.
+ * @param {Date | string | null | undefined} dueDateFromInvoice - The dueDate field from your Prisma invoice object.
+ * @returns {boolean} True if the invoice is overdue.
+ */
+export function isInvoiceOverdue(dueDateFromInvoice: Date) {
+  if (!dueDateFromInvoice) {
+    return false; // Cannot be overdue if there is no due date
+  }
+
+  // 1. Ensure it's a Date object (Prisma returns Date, but check for safety)
+  const dueDate = new Date(dueDateFromInvoice);
+
+  // 2. Get today's date, set the time to midnight (00:00:00) to ensure a fair comparison
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // 3. Get the due date, also set to midnight for comparison
+  const dueDateOnly = new Date(dueDate);
+  dueDateOnly.setHours(0, 0, 0, 0);
+
+  // An invoice is overdue if the due date is strictly before today.
+  // We use < here because we want it to be considered overdue *starting* the day after the due date.
+  return dueDateOnly < today;
+}

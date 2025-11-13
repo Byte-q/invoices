@@ -297,9 +297,7 @@ export async function fetchFilteredInvoices(
       id: invoice.id,
       amount: invoice.amount,
       status: invoice.status as "PENDING" | "PAID",
-      date: invoice.dueDate
-        ? invoice.dueDate.toISOString().split("T")[0]
-        : "N/A",
+      dueDate: invoice.dueDate,
       name: invoice.customer!.name!,
       customer_id: invoice.customerId,
       email: invoice.customer!.email!,
@@ -354,6 +352,7 @@ export async function fetchInvoiceById(id: string) {
         customerId: true,
         amount: true,
         status: true,
+        dueDate: true,
       },
     });
 
@@ -367,6 +366,7 @@ export async function fetchInvoiceById(id: string) {
       customer_id: invoice.customerId,
       amount: invoice.amount / 100,
       status: invoice.status,
+      dueDate: invoice.dueDate,
     } as InvoiceForm;
   } catch (error) {
     console.error("Database Error:", error);

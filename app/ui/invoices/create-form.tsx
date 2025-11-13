@@ -13,6 +13,7 @@ import { createInvoice, State } from "@/app/lib/actions";
 import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { DatePicker } from "@/components/ui/date-picker";
 
 export default function Form({ customers }: { customers: CustomerField[] }) {
   // const initialState: State = { message: null, errors: {} };
@@ -90,6 +91,15 @@ export default function Form({ customers }: { customers: CustomerField[] }) {
           </div> */}
         </div>
 
+        <div className="mb-4">
+          <label htmlFor="amount" className="mb-2 block text-sm font-medium">
+            Choose due date
+          </label>
+          <div className="relative mt-2 rounded-md">
+            <DatePicker name="dueDate" />
+          </div>
+        </div>
+
         {/* Invoice Amount */}
         <div className="mb-4">
           <label htmlFor="amount" className="mb-2 block text-sm font-medium">
@@ -124,14 +134,14 @@ export default function Form({ customers }: { customers: CustomerField[] }) {
           <legend className="mb-2 block text-sm font-medium">
             Set the invoice status
           </legend>
-          <div className="rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-[14px] py-3">
+          <div className="rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-3.5 py-3">
             <div className="flex gap-4">
               <div className="flex items-center">
                 <input
                   id="pending"
                   name="status"
                   type="radio"
-                  value="pending"
+                  value="PENDING"
                   className="h-4 w-4 cursor-pointer border-gray-300 bg-gray-100 text-gray-600 focus:ring-2"
                   aria-describedby="customer-error"
                 />
@@ -147,7 +157,7 @@ export default function Form({ customers }: { customers: CustomerField[] }) {
                   id="paid"
                   name="status"
                   type="radio"
-                  value="paid"
+                  value="PAID"
                   className="h-4 w-4 cursor-pointer border-gray-300 bg-gray-100 text-gray-600 focus:ring-2"
                 />
                 <label

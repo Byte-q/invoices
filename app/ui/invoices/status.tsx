@@ -1,7 +1,9 @@
+import { isInvoiceOverdue } from '@/app/lib/utils';
 import { CheckIcon, ClockIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
-export default function InvoiceStatus({ status }: { status: string }) {
+export default function InvoiceStatus({ status }: { status: string; }) {
+
   return (
     <span
       className={clsx(
@@ -9,6 +11,7 @@ export default function InvoiceStatus({ status }: { status: string }) {
         {
           'bg-gray-100 text-gray-500': status === 'PENDING',
           'bg-green-500 text-white': status === 'PAID',
+          'bg-red-500 text-white': status === 'OVERDUE',
         },
       )}
     >
@@ -22,6 +25,11 @@ export default function InvoiceStatus({ status }: { status: string }) {
         <>
           Paid
           <CheckIcon className="ml-1 w-4 text-white" />
+        </>
+      ) : null}
+      {status === 'OVERDUE' ? (
+        <>
+          Over due
         </>
       ) : null}
     </span>

@@ -12,14 +12,7 @@ const FormSchema = z.object({
   status: z.enum(["PENDING", "PAID"], {
     message: "Please select an invoice status.", // Correct Zod message pattern
   }),
-  dueDate: z.coerce.date({
-    errorMap: (issue, ctx) => {
-      if (issue.code === z.ZodIssueCode.invalid_date) {
-        return { message: "Invalid date value." };
-      }
-      return { message: "Please select a valid due date." };
-    },
-  }),
+  dueDate: z.coerce.date(),
 });
 
 const CreateInvoice = FormSchema.omit({ });

@@ -9,7 +9,6 @@ import {
   CardsSkeleton,
 } from "@/app/ui/skeletons";
 import { Metadata } from "next";
-import { ChartAreaDefault } from "@/components/ui/RevenueChart";
 
 export const metadata: Metadata = {
   title: "Dashboard",

@@ -18,9 +18,9 @@ export default function SideNav() {
       </Link>
       <div className="flex grow flex-row justify-between space-x-2 md:flex-col md:space-x-0 md:space-y-2">
         <NavLinks />
-        <div className="hidden h-auto w-full grow rounded-md bg-gray-50 dark:bg-gray-600 md:block"></div>
-        <div className="w-full bg-gray-50 dark:bg-gray-600 p-2 rounded-sm">
-          {/* <ModeToggle /> */}
+        <div className="hidden h-auto w-full grow rounded-md bg-gray-50 dark:bg-neutral-900 md:block"></div>
+        <div className="w-full bg-gray-50 dark:bg-neutral-900 p-2 rounded-sm">
+          <ModeToggle />
           {/* <AuthorizationButton /> */}
         </div>
       </div>

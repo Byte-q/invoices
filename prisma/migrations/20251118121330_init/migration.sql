@@ -1,61 +1,17 @@
-/*
-  Warnings:
+-- CreateEnum
+CREATE TYPE "OrgRole" AS ENUM ('OWNER', 'ADMIN', 'MEMBER');
 
-  - You are about to drop the `Business` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `Customer` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `Invoice` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `Membership` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `Organization` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `User` table. If the table is not empty, all the data it contains will be lost.
+-- CreateEnum
+CREATE TYPE "BizRole" AS ENUM ('MANAGER', 'STAFF');
 
-*/
--- DropForeignKey
-ALTER TABLE "Business" DROP CONSTRAINT "Business_organizationId_fkey";
+-- CreateEnum
+CREATE TYPE "Plan" AS ENUM ('FREE', 'BASIC', 'PRO', 'BUSINESS');
 
--- DropForeignKey
-ALTER TABLE "Customer" DROP CONSTRAINT "Customer_businessId_fkey";
+-- CreateEnum
+CREATE TYPE "InvoiceStatus" AS ENUM ('PENDING', 'PAID', 'CANCELLED', 'OVERDUE');
 
--- DropForeignKey
-ALTER TABLE "Employment" DROP CONSTRAINT "Employment_businessId_fkey";
-
--- DropForeignKey
-ALTER TABLE "Employment" DROP CONSTRAINT "Employment_userId_fkey";
-
--- DropForeignKey
-ALTER TABLE "Invoice" DROP CONSTRAINT "Invoice_businessId_fkey";
-
--- DropForeignKey
-ALTER TABLE "Invoice" DROP CONSTRAINT "Invoice_customerId_fkey";
-
--- DropForeignKey
-ALTER TABLE "Membership" DROP CONSTRAINT "Membership_organizationId_fkey";
-
--- DropForeignKey
-ALTER TABLE "Membership" DROP CONSTRAINT "Membership_userId_fkey";
-
--- DropForeignKey
-ALTER TABLE "Organization" DROP CONSTRAINT "Organization_ownerId_fkey";
-
--- DropForeignKey
-ALTER TABLE "Revenue" DROP CONSTRAINT "Revenue_businessId_fkey";
-
--- DropTable
-DROP TABLE "Business";
-
--- DropTable
-DROP TABLE "Customer";
-
--- DropTable
-DROP TABLE "Invoice";
-
--- DropTable
-DROP TABLE "Membership";
-
--- DropTable
-DROP TABLE "Organization";
-
--- DropTable
-DROP TABLE "User";
+-- CreateEnum
+CREATE TYPE "InvoicesType" AS ENUM ('SENT', 'RECEIVED');
 
 -- CreateTable
 CREATE TABLE "Users" (
@@ -66,6 +22,7 @@ CREATE TABLE "Users" (
     "email" TEXT NOT NULL,
     "password" TEXT,
     "image" TEXT,
+    "plan" "Plan" NOT NULL DEFAULT 'FREE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -77,6 +34,7 @@ CREATE TABLE "Organizations" (
     "id" TEXT NOT NULL,
     "name" TEXT,
     "ownerId" TEXT NOT NULL,
+    "refreshToken" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -107,6 +65,17 @@ CREATE TABLE "Businesses" (
 );
 
 -- CreateTable
+CREATE TABLE "Employment" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "businessId" TEXT NOT NULL,
+    "role" "BizRole" NOT NULL DEFAULT 'STAFF',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Employment_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Customers" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -126,6 +95,7 @@ CREATE TABLE "Invoices" (
     "number" TEXT NOT NULL,
     "amount" DOUBLE PRECISION NOT NULL,
     "status" "InvoiceStatus" NOT NULL DEFAULT 'PENDING',
+    "invType" "InvoicesType" NOT NULL DEFAULT 'SENT',
     "dueDate" TIMESTAMP(3),
     "customerId" TEXT,
     "businessId" TEXT NOT NULL,
@@ -135,11 +105,27 @@ CREATE TABLE "Invoices" (
     CONSTRAINT "Invoices_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "Revenue" (
+    "id" TEXT NOT NULL,
+    "month" TEXT NOT NULL,
+    "revenue" INTEGER NOT NULL,
+    "businessId" TEXT NOT NULL,
+
+    CONSTRAINT "Revenue_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Users_email_key" ON "Users"("email");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Organizations_ownerId_key" ON "Organizations"("ownerId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Memberships_userId_organizationId_key" ON "Memberships"("userId", "organizationId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Employment_userId_businessId_key" ON "Employment"("userId", "businessId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Invoices_number_key" ON "Invoices"("number");

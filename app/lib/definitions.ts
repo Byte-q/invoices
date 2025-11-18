@@ -39,6 +39,12 @@ export type LatestInvoice = {
   email: string;
 };
 
+export type ChartInvoice = {
+  amount: number;
+  date: Date;
+  type: "SENT" | "RECEIVED"
+};
+
 // The database returns a number for amount, but we later format it to a string with the formatCurrency function
 export type LatestInvoiceRaw = Omit<LatestInvoice, 'amount'> & {
   amount: number;
@@ -86,6 +92,7 @@ export type InvoiceForm = {
   amount: number;
   status: 'PENDING' | 'PAID';
   dueDate: Date;
+  type: 'SENT' | 'RECEIVED';
 };
 
 export type CustomerAnalytics = {

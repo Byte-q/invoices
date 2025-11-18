@@ -7,6 +7,10 @@ export const formatCurrency = (amount: number) => {
   });
 };
 
+export const formatChartCurrency = (amount: number) => {
+  return (amount / 100)
+};
+
 export const formatDateToLocal = (
   dueDate: Date,
   locale: string = 'en-US',
@@ -22,14 +26,35 @@ export const formatDateToLocal = (
 };
 
 export const generateYAxis = (revenue: Revenue[]) => {
-  // Calculate what labels we need to display on the y-axis
-  // based on highest record and in 1000s
   const yAxisLabels = [];
   const highestRecord = Math.max(...revenue.map((month) => month.revenue));
-  const topLabel = Math.ceil(highestRecord / 1000) * 1000;
+  
+  // 1. Calculate the ceiling of the highest record, rounded up to the nearest 1000
+  const topLabel = Math.ceil(highestRecord / 1000) * 1000; 
 
-  for (let i = topLabel; i >= 0; i -= 1000) {
-    yAxisLabels.push(`$${i / 1000}K`);
+  const desiredSteps = 5;
+  
+  // 2. Calculate the raw step size needed to get the desired number of labels
+  const rawStepSize = topLabel / desiredSteps;
+
+  // 3. Determine the dynamic step size based on magnitude (e.g., 10k, 20k, 50k)
+  let dynamicStep = 1000; // Default minimum step
+  
+  if (rawStepSize > 1000) {
+      // Find the magnitude (power of 10) of the raw step
+      const power = Math.floor(Math.log10(rawStepSize));
+      const base = Math.pow(10, power);
+
+      // Round the step size up to the nearest clean multiple of its magnitude
+      dynamicStep = Math.ceil(rawStepSize / base) * base;
+  }
+  
+  // Ensure the step is at least 1000, which is necessary for the "$K" labeling
+  dynamicStep = Math.max(1000, dynamicStep);
+  
+  // 4. Loop with the calculated dynamic step
+  for (let i = topLabel; i >= 0; i -= dynamicStep) {
+    yAxisLabels.push(`$${i / 1000}${i > 1000 && "K"}`);
   }
 
   return { yAxisLabels, topLabel };

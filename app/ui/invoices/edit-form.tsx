@@ -9,11 +9,12 @@ import {
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { Button } from "@/app/ui/button";
-import { updateInvoice, State } from "@/app/lib/actions";
-import { useActionState, useState } from "react";
+import { updateInvoice } from "@/app/lib/actions";
+import { useActionState, useEffect, useState } from "react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { State } from "@/app/lib/schemas";
 
 export default function EditInvoiceForm({
   invoice,
@@ -22,76 +23,62 @@ export default function EditInvoiceForm({
   invoice: InvoiceForm;
   customers: CustomerField[];
 }) {
-  // const initialState: State = { message: null, errors: {} };
-  // const updateInvoiceWithId = updateInvoice.bind(null, invoice.id);
-  // const [state, formAction] = useActionState(updateInvoiceWithId, initialState);
-
-  console.log("check2", invoice)
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const customer = customers.map((c) =>
-    c.id === invoice.customer_id ? c : undefined
-  );
+  // 🔑 Bind the update function with the invoice ID
+  const updateInvoiceWithId = updateInvoice.bind(null, invoice.id);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
+  const initialState: State = { message: null, errors: {} };
+  const [state, formAction] = useActionState(updateInvoiceWithId, initialState);
 
-    const formData = new FormData(e.currentTarget);
-
-    try {
-      const res = await fetch("/api/invoices/update", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) throw new Error("Failed to submit");
-      const amount = formData.get("amount");
-      const customerId = formData.get("customerId");
-      const customer = customers.map((c) =>
-        c.id === customerId ? c.name : "undefiend"
-      );
-
-      toast("Invoice updated", {
-        description: `Customer: ${customer[0]}, Amount: $${amount}`,
-        action: {
-          label: "View",
-          onClick: () => router.push("/dashboard/invoices"),
-        },
-      });
-    } catch (err) {
-      toast.error("Something went wrong, please try again.");
-    } finally {
-      setLoading(false);
+  // Handle action feedback
+  useEffect(() => {
+    if (state.message === "Invoice updated successfully.") {
+      toast.success(state.message);
+      router.push("/dashboard/invoices"); // Redirect after successful update
+    } else if (state.message) {
+      toast.error(state.message);
     }
-  };
+  }, [state, router]);
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form action={formAction}>
       <div className="rounded-md bg-gray-50 dark:bg-gray-600 p-4 md:p-6">
         {/* Customer Name */}
         <div className="mb-4">
-          <label htmlFor="amount" className="mb-2 block text-sm font-medium">
-            Customer name
+          <label htmlFor="customer" className="mb-2 block text-sm font-medium">
+            Choose customer
           </label>
-          <div className="relative mt-2 rounded-md">
-            <div className="relative">
-              <input
-                id="name"
-                name="customerName"
-                type="text"
-                disabled
-                value={customer[0]!.name}
-                className="peer block w-full rounded-md border border-gray-200 dark:border-neutral-400 dark:bg-gray-800 py-2 pl-10 text-sm text-gray-400 outline-2 placeholder:text-gray-500"
-              />
-              <UserCircleIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
-            </div>
+          <div className="relative">
+            <select
+              id="customer"
+              name="customerId"
+              className="peer block w-full cursor-pointer rounded-md border border-gray-200 dark:border-neutral-300 dark:bg-gray-800 py-2 pl-10 text-sm outline-2 placeholder:text-gray-500"
+              defaultValue={invoice.customer_id}
+              aria-describedby="customer-error"
+            >
+              <option className="dark:text-neutral-300" value="" disabled>
+                Select a customer
+              </option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </select>
+            <UserCircleIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500" />
+          </div>
+          <div id="customer-error" aria-live="polite" aria-atomic="true">
+            {state.errors?.customerId &&
+              state.errors.customerId.map((error: string) => (
+                <p className="mt-2 text-sm text-red-500" key={error}>
+                  {error}
+                </p>
+              ))}
           </div>
         </div>
 
         <input type="hidden" name="id" value={invoice.id} />
-        <input type="hidden" name="customerId" defaultValue={customer[0]!.id} />
 
         <div className="mb-4">
           <label htmlFor="amount" className="mb-2 block text-sm font-medium">
@@ -99,6 +86,14 @@ export default function EditInvoiceForm({
           </label>
           <div className="relative mt-2 rounded-md">
             <DatePicker name="dueDate" defaultDate={invoice.dueDate} />
+          </div>
+          <div id="date-error" aria-live="polite" aria-atomic="true">
+            {state.errors?.dueDate &&
+              state.errors.dueDate.map((error: string) => (
+                <p className="mt-2 text-sm text-red-500" key={error}>
+                  {error}
+                </p>
+              ))}
           </div>
         </div>
 
@@ -120,6 +115,14 @@ export default function EditInvoiceForm({
               />
               <CurrencyDollarIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
             </div>
+          </div>
+          <div id="customer-error" aria-live="polite" aria-atomic="true">
+            {state.errors?.amount &&
+              state.errors.amount.map((error: string) => (
+                <p className="mt-2 text-sm text-red-500" key={error}>
+                  {error}
+                </p>
+              ))}
           </div>
         </div>
 
@@ -164,6 +167,14 @@ export default function EditInvoiceForm({
               </div>
             </div>
           </div>
+          <div id="customer-error" aria-live="polite" aria-atomic="true">
+            {state.errors?.status &&
+              state.errors.status.map((error: string) => (
+                <p className="mt-2 text-sm text-red-500" key={error}>
+                  {error}
+                </p>
+              ))}
+          </div>
         </fieldset>
       </div>
       <div className="mt-6 flex justify-end gap-4">
@@ -173,7 +184,9 @@ export default function EditInvoiceForm({
         >
           Cancel
         </Link>
-        <Button type="submit">Edit Invoice</Button>
+        <Button type="submit">
+          Update {/* You can use a useFormStatus hook here for loading state */}
+        </Button>
       </div>
     </form>
   );

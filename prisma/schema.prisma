@@ -22,6 +22,7 @@ model Users {
   email         String          @unique
   password      String?
   image         String?
+  plan          Plan            @default(FREE)
   memberships   Memberships[] // organizations the user is part of
   employments   Employment[] // businesses the user works in
   createdAt     DateTime        @default(now())
@@ -97,6 +98,7 @@ model Invoices {
   number     String        @unique
   amount     Float
   status     InvoiceStatus @default(PENDING)
+  invType    InvoicesType  @default(SENT)
   dueDate    DateTime?
   customer   Customers?    @relation(fields: [customerId], references: [id])
   customerId String?
@@ -125,9 +127,21 @@ enum BizRole {
   STAFF
 }
 
+enum Plan {
+  FREE
+  BASIC
+  PRO
+  BUSINESS
+}
+
 enum InvoiceStatus {
   PENDING
   PAID
   CANCELLED
   OVERDUE
+}
+
+enum InvoicesType {
+  SENT
+  RECEIVED
 }

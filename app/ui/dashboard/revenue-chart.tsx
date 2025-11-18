@@ -1,9 +1,16 @@
 import { generateYAxis } from "@/app/lib/utils";
 import { CalendarIcon } from "@heroicons/react/24/outline";
 import { lusitana } from "@/app/ui/fonts";
-import { Revenue } from "@/app/lib/definitions";
-import { fetchRevenue } from "@/app/lib/data";
+import { InvoicesTable, Revenue } from "@/app/lib/definitions";
+import {
+  fetchChartInvoices,
+  fetchInvoices,
+  fetchMonthlyRevenue,
+  fetchRevenue,
+} from "@/app/lib/data";
 import { months } from "@/app/lib/placeholder-data";
+import { ChartAreaInteractive } from "@/components/ui/wideChart";
+import { RevenueExpenseChart } from "@/components/ui/RevenueChart";
 
 // This component is representational only.
 // For data visualization UI, check out:
@@ -12,56 +19,45 @@ import { months } from "@/app/lib/placeholder-data";
 // https://airbnb.io/visx/
 
 export default async function RevenueChart() {
+  const invoices = fetchInvoices();
+  const monthlyRevenueData = await fetchMonthlyRevenue();
   // Make component async, remove the props
-  let revenue = await fetchRevenue(); // Fetch data inside the component
+  // const revenue = await fetchRevenue(); // Fetch data inside the component
+  const { yAxisLabels, topLabel } = generateYAxis(monthlyRevenueData);
   const chartHeight = 350;
 
-  let yAxisLabels, topLabel;
-
-  if (!revenue || revenue.length === 0) {
-    // 1. Create a placeholder array with 12 months, all revenue set to 0.
-    revenue = Array.from({ length: 12 }, (_, i) => ({
-      month: months[i], // Placeholder month label
-      revenue: 0,
-    }));
-    // 2. Since revenue is 0, we can manually set the topLabel to 0 and yAxisLabels to ['$', '$0'].
-    // Note: If generateYAxis handles a zero input, you could use that instead.
-    // Assuming a simple manual override is needed for the $0 display.
-    topLabel = 2;
-    yAxisLabels = ["$0K", "$0K", "$0K", "$0K", "$0K", "$0K"];
-  } else {
-    // Use the fetched data and generate the axis labels normally
-    const yAxisData = generateYAxis(revenue);
-    yAxisLabels = yAxisData.yAxisLabels;
-    topLabel = yAxisData.topLabel;
-  }
-
+  const chartInvoices = await fetchChartInvoices();
   return (
     <div className="w-full md:col-span-4">
       <h2 className={`${lusitana.className} mb-4 text-xl md:text-2xl`}>
         Recent Revenue
       </h2>
 
-      <div className="rounded-xl bg-gray-50 dark:bg-gray-600 p-4">
-        <div className="sm:grid-cols-13 mt-0 grid grid-cols-12 items-end gap-2 rounded-md bg-white dark:bg-gray-800 p-4 md:gap-4">
+      {/* <div className="rounded-xl bg-card border shadow p-3">
+        <div className="sm:grid-cols-14 mt-0 grid grid-cols-12 items-end gap-2 rounded-md p-4 md:gap-4">
           <div
-            className="mb-6 hidden flex-col justify-between text-sm text-gray-400 dark:text-white sm:flex"
+            className="mb-6 hidden flex-col gap-5 justify-between text-xs sm:flex"
             style={{ height: `${chartHeight}px` }}
           >
             {yAxisLabels.map((label) => (
-              <p key={label}>{label}</p>
+              <p key={label} className="text-xs">
+                {label}
+              </p>
             ))}
           </div>
-
-          {revenue.map((month) => (
+          <div></div>
+          {monthlyRevenueData.map((month) => (
             <div key={month.month} className="flex flex-col items-center gap-2">
               <div
                 className="w-full rounded-md bg-blue-300"
                 style={{
-                  height: `${(chartHeight / topLabel) * (month.revenue === 0 ? 1 : month.revenue)}px`,
+                  height: `${
+                    (chartHeight / topLabel) *
+                    (month.revenue === 0 ? 1 : month.revenue)
+                  }px`,
                 }}
               ></div>
-              <p className="-rotate-90 text-sm text-gray-400 dark:text-white sm:rotate-0">
+              <p className="-rotate-90 text-xs text-gray-400 dark:text-white sm:rotate-0">
                 {month.month}
               </p>
             </div>
@@ -73,7 +69,8 @@ export default async function RevenueChart() {
             Last 12 months
           </h3>
         </div>
-      </div>
+      </div> */}
+      <RevenueExpenseChart invoices={chartInvoices} />
     </div>
   );
 }

@@ -1,16 +1,18 @@
 import { cookies } from "next/headers"; // NEW: To read the session cookie
 import { verifyToken } from "@/lib/auth"; // NEW: Assuming this utility exists based on route.ts
 import {
+  ChartInvoice,
   CustomerField,
   InvoiceForm,
   InvoicesTable,
   LatestInvoice,
   Revenue,
 } from "./definitions";
-import { formatCurrency } from "./utils";
+import { formatChartCurrency, formatCurrency } from "./utils";
 import { prisma } from "@/lib/prisma";
 import { cache } from "react";
 import { NextResponse } from "next/server";
+import { getBusinessIdFromAuth } from "./actions";
 
 // ----------------------------------------------------
 // HELPER FUNCTION: Get Business ID from Auth
@@ -97,7 +99,7 @@ export async function getEncryptedTokenFromDB(userId: string) {
     where: { ownerId: userId },
   });
   const encryptedToken = org?.refreshToken;
-  
+
   return encryptedToken;
 }
 
@@ -177,6 +179,53 @@ export async function fetchLatestInvoices(): Promise<LatestInvoice[]> {
   }
 }
 
+export async function fetchChartInvoices(): Promise<ChartInvoice[]> {
+  try {
+    // REMOVED: userId parameter
+    const businessId = await getBusinessId();
+
+    if (!businessId) {
+      console.warn(
+        `No business found for authenticated user. Returning empty list.`
+      );
+      return [];
+    }
+
+    const chartInvoicesData = await prisma.invoices.findMany({
+      where: {
+        businessId: businessId, // Filter by the user's business
+      },
+      orderBy: {
+        // Order by the due date in descending order (latest first)
+        createdAt: "desc",
+      },
+      include: {
+        // Include the related customer data (SQL JOIN)
+        customer: {
+          select: {
+            name: true,
+            email: true,
+            image_url: true,
+          },
+        },
+      },
+    });
+
+    const chartInvoices: ChartInvoice[] = chartInvoicesData.map(
+      (invoice) => ({
+        amount: formatChartCurrency(invoice.amount),
+        date: invoice.dueDate!,
+        type: invoice.invType,
+      })
+    );
+
+    return chartInvoices;
+  } catch (error) {
+    console.error("Database Error:", error);
+    throw new Error("Failed to fetch the latest invoices.");
+  }
+}
+
 export async function fetchCardData() {
   try {
     // REMOVED: userId parameter
@@ -187,6 +236,7 @@ export async function fetchCardData() {
       numberOfInvoices: 0,
       totalPaidInvoices: 0,
       totalPendingInvoices: 0,
+      numberOfOverdueInvoices: 0,
     };
 
     if (!businessId) {
@@ -205,6 +255,10 @@ export async function fetchCardData() {
       where: { businessId: businessId },
     });
 
+    const promiseOverdueInvoices = prisma.invoices.count({
+      where: { businessId: businessId, status: "OVERDUE" },
+    });
+
     // Count of 'PAID' invoices
     const promisePaidInvoices = prisma.invoices.count({
       where: { businessId: businessId, status: "PAID" },
@@ -221,6 +275,7 @@ export async function fetchCardData() {
       promiseInvoices,
       promisePaidInvoices,
       promisePendingInvoices,
+      promiseOverdueInvoices,
     ]);
 
     // 4. Destructure the results
@@ -229,6 +284,7 @@ export async function fetchCardData() {
       numberOfInvoices,
       totalPaidInvoices,
       totalPendingInvoices,
+      numberOfOverdueInvoices,
     ] = data;
 
     // 5. Return the metrics
@@ -237,6 +293,7 @@ export async function fetchCardData() {
       numberOfInvoices,
       totalPaidInvoices,
       totalPendingInvoices,
+      numberOfOverdueInvoices,
     };
   } catch (error) {
     console.error("Database Error:", error);
@@ -273,6 +330,51 @@ export async function fetchFilteredInvoices(
       },
       take: ITEMS_PER_PAGE,
       skip: offset,
+      orderBy: {
+        dueDate: "desc",
+      },
+      select: {
+        id: true,
+        amount: true,
+        status: true,
+        customerId: true,
+        dueDate: true, // Keep the Date object here
+        customer: {
+          select: {
+            name: true,
+            email: true,
+            image_url: true,
+          },
+        },
+      },
+    });
+
+    // Map and format for the final output
+    return invoices.map((invoice) => ({
+      id: invoice.id,
+      amount: invoice.amount,
+      status: invoice.status as "PENDING" | "PAID",
+      dueDate: invoice.dueDate,
+      name: invoice.customer!.name!,
+      customer_id: invoice.customerId,
+      email: invoice.customer!.email!,
+      image_url: invoice.customer!.image_url!,
+    })) as InvoicesTable[];
+  } catch (error) {
+    console.error("Database Error:", error);
+    throw new Error("Failed to fetch invoices.");
+  }
+}
+
+export async function fetchInvoices(): Promise<InvoicesTable[]> {
+  const businessId = await getBusinessId(); // Now called without argument
+  if (!businessId) return [];
+
+  try {
+    const invoices = await prisma.invoices.findMany({
+      where: {
+        businessId: businessId,
+      },
       orderBy: {
         dueDate: "desc",
       },
@@ -508,5 +610,85 @@ export async function fetchFilteredCustomers(
   } catch (err) {
     console.error("Database Error:", err);
     throw new Error("Failed to fetch customer table.");
+  }
+}
+
+// ----------------------------------------------------\
+// DATA FETCHING: Monthly Revenue
+// ----------------------------------------------------\
+/**
+ * Fetches the total paid invoice revenue for the last 12 months,
+ * aggregated by month and year.
+ * @returns {Array<{month: string, revenue: number}>} An array of monthly revenue objects.
+ */
+export async function fetchMonthlyRevenue(): Promise<
+  { month: string; revenue: number }[]
+> {
+  try {
+    const businessId = await getBusinessIdFromAuth();
+    if (!businessId) {
+      return [];
+    }
+
+    // Calculate the date 12 months ago to limit the query scope
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
+    twelveMonthsAgo.setDate(1); // Set to the first day of the month
+
+    // 1. Fetch all paid invoices for the last 12 months
+    // NOTE: This assumes an invoice table has a field named 'date' (DateTime type)
+    const paidInvoices = await prisma.invoices.findMany({
+      where: {
+        businessId: businessId,
+        status: "PAID",
+        dueDate: {
+          gte: twelveMonthsAgo,
+        },
+      },
+      select: {
+        dueDate: true,
+        amount: true,
+      },
+      orderBy: {
+        dueDate: "asc",
+      },
+    });
+
+    // 2. Aggregate in memory (safer than raw SQL)
+    const monthlyDataMap = new Map<string, number>();
+
+    paidInvoices.forEach((invoice) => {
+      const date = invoice.dueDate;
+      // Create a unique key: YYYY-MM (e.g., '2025-03')
+      const yearMonthKey = `${date!.getFullYear()}-${(date!.getMonth() + 1)
+        .toString()
+        .padStart(2, "0")}`;
+
+      const currentRevenue = monthlyDataMap.get(yearMonthKey) || 0;
+      monthlyDataMap.set(yearMonthKey, currentRevenue + invoice.amount);
+    });
+
+    // 3. Format the map into the final array structure
+    const monthlyRevenue = Array.from(monthlyDataMap.entries()).map(
+      ([yearMonth, revenue]) => {
+        const [year, month] = yearMonth.split("-");
+
+        // Convert month number (01-12) to short name (Jan-Dec)
+        const monthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+        const shortMonthName = monthDate.toLocaleString("default", {
+          month: "short",
+        });
+
+        return {
+          month: shortMonthName,
+          revenue: revenue, // Revenue in cents/minor units
+        };
+      }
+    );
+
+    return monthlyRevenue;
+  } catch (error) {
+    console.error("Database Error: Failed to fetch monthly revenue.", error);
+    return [];
   }
 }

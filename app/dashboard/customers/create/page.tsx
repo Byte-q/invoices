@@ -1,20 +1,26 @@
 import Form from "@/app/ui/customers/create-form";
 import Breadcrumbs from "@/app/ui/invoices/breadcrumbs";
-import { fetchCustomers } from "@/app/lib/data";
+import ToastFeedback from "@/components/ui/toast-feedback";
 import { Metadata } from "next";
+import { Suspense } from "react";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Create",
 };
 
-export default async function Page() {
-  const customers = await fetchCustomers();
-
+export default async function Page({
+  searchParams,
+}: {
+  // Next.js passes searchParams to Server Components
+  searchParams: { status?: string };
+}) {
   return (
     <main>
       <Breadcrumbs
         breadcrumbs={[
-          { label: "Invoices", href: "/dashboard/customer" },
+          { label: "Customer", href: "/dashboard/customers" },
           {
             label: "Create Customer",
             href: "/dashboard/customers/create",
@@ -23,6 +29,10 @@ export default async function Page() {
         ]}
       />
       <Form />
+      <Suspense>
+        {/* Pass the status to the client component for toast handling */}
+        <ToastFeedback status={searchParams.status} />
+      </Suspense>
     </main>
   );
 }

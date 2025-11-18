@@ -11,10 +11,10 @@ export default async function LatestInvoices() { // Remove props
       <h2 className={`${lusitana.className} mb-4 text-xl md:text-2xl`}>
         Latest Invoices
       </h2>
-      <div className="flex grow flex-col justify-between rounded-xl bg-gray-50 dark:bg-gray-600 p-4">
+      <div className="flex grow flex-col justify-between rounded-xl bg-card border shadow p-4">
         {/* NOTE: Uncomment this code in Chapter 7 */}
 
-        <div className="bg-white dark:bg-gray-800 px-6 rounded">
+        <div className="px-6 rounded">
           {latestInvoices.map((invoice, i) => {
             return (
               <div

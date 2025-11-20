@@ -4,6 +4,7 @@ import Link from "next/link";
 import styles from "@/app/ui/home.module.css";
 import { lusitana } from "./ui/fonts";
 import Image from "next/image";
+import { LoginLink } from "@kinde-oss/kinde-auth-nextjs/components";
 
 export default function Page() {
   return (
@@ -23,12 +24,12 @@ export default function Page() {
             </a>
             , brought to you by Vercel.
           </p>
-          <Link
-            href="/login?query=userData"
-            className="flex items-center gap-5 self-start rounded-lg bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-400 md:text-base"
-          >
-            <span>Log in</span> <ArrowRightIcon className="w-5 md:w-6" />
-          </Link>
+            <button className="flex items-center gap-5 self-start rounded-lg bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-400 md:text-base">
+          <LoginLink postLoginRedirectURL="/dashboard">
+              Sign in
+              <ArrowRightIcon className="w-5 md:w-6" />
+          </LoginLink>
+            </button>
         </div>
         <div className="flex items-center justify-center p-6 md:w-3/5 md:px-28 md:py-12">
           {/* Add Hero Images Here */}

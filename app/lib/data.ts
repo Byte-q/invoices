@@ -1,694 +1,218 @@
-import { cookies } from "next/headers"; // NEW: To read the session cookie
-import { verifyToken } from "@/lib/auth"; // NEW: Assuming this utility exists based on route.ts
+import postgres from 'postgres';
 import {
-  ChartInvoice,
   CustomerField,
+  CustomersTableType,
   InvoiceForm,
   InvoicesTable,
-  LatestInvoice,
+  LatestInvoiceRaw,
   Revenue,
-} from "./definitions";
-import { formatChartCurrency, formatCurrency } from "./utils";
-import { prisma } from "@/lib/prisma";
-import { cache } from "react";
-import { NextResponse } from "next/server";
-import { getBusinessIdFromAuth } from "./actions";
+} from './definitions';
+import { formatCurrency } from './utils';
 
-// ----------------------------------------------------
-// HELPER FUNCTION: Get Business ID from Auth
-// ----------------------------------------------------
-/**
- * Retrieves the primary Business ID associated with the authenticated user
- * by decoding the 'wb_session' cookie.
- */
-async function getBusinessId(): Promise<string | undefined> {
-  // 1. Get the session cookie
-  const cookie = await cookies();
-  const session = cookie.get("wb_session")?.value;
+const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
 
-  if (!session) {
-    return undefined;
-  }
-
-  // 2. Decode the JWT to get the userId
-  // NOTE: We assume verifyToken is available and returns { userId: string }
-  const decoded = await verifyToken(session);
-  const userId = decoded?.userId;
-
-  if (!userId) {
-    return undefined;
-  }
-
-  // 3. Look up the Business ID associated with the User
-  const userWithBusiness = await prisma.users.findUnique({
-    where: { id: userId },
-    select: {
-      organizations: {
-        select: {
-          businesses: {
-            select: { id: true },
-            take: 1, // Get the primary business
-          },
-        },
-        take: 1, // Get the primary organization
-      },
-    },
-  });
-
-  return userWithBusiness?.organizations[0]?.businesses[0]?.id;
-}
-
-/**
- * Retrieves the primary Business ID associated with the authenticated user
- * by decoding the 'wb_session' cookie.
- */
-export async function getUserId(): Promise<string | undefined> {
-  // 1. Get the session cookie
-  const cookie = await cookies();
-  const session = cookie.get("wb_session")?.value;
-
-  if (!session) {
-    return undefined;
-  }
-
-  // 2. Decode the JWT to get the userId
-  // NOTE: We assume verifyToken is available and returns { userId: string }
-  const decoded = await verifyToken(session);
-  const userId = decoded?.userId;
-
-  if (!userId) {
-    return undefined;
-  }
-  return userId;
-}
-
-export async function saveEncryptedTokenToDB(userId: string, token: string) {
+export async function fetchRevenue() {
   try {
-    await prisma.organizations.update({
-      where: { ownerId: userId },
-      data: { refreshToken: token },
-    });
-    return new NextResponse("successfully stored refreshToken");
-  } catch (err) {
-    console.log("Error Failed to stored refreshToken", err);
-  }
-}
+    // Artificially delay a response for demo purposes.
+    // Don't do this in production :)
 
-export async function getEncryptedTokenFromDB(userId: string) {
-  const org = await prisma.organizations.findUnique({
-    where: { ownerId: userId },
-  });
-  const encryptedToken = org?.refreshToken;
+    // console.log('Fetching revenue data...');
+    // await new Promise((resolve) => setTimeout(resolve, 3000));
 
-  return encryptedToken;
-}
+    const data = await sql<Revenue[]>`SELECT * FROM revenue`;
 
-export async function fetchRevenue(): Promise<Revenue[]> {
-  try {
-    // REMOVED: userId parameter
-    const businessId = await getBusinessId(); // Now called without argument
+    // console.log('Data fetch completed after 3 seconds.');
 
-    if (!businessId) {
-      console.warn(
-        `No business found for authenticated user. Returning empty revenue list.`
-      );
-      return [];
-    }
-
-    const revenue = await prisma.revenue.findMany({
-      where: { businessId: businessId },
-      orderBy: {
-        month: "asc", // Sort by month string (assuming format is 3-letter)
-      },
-    });
-
-    return revenue as Revenue[];
+    return data;
   } catch (error) {
-    console.error("Database Error:", error);
-    throw new Error("Failed to fetch revenue data.");
+    console.error('Database Error:', error);
+    throw new Error('Failed to fetch revenue data.');
   }
 }
 
-export async function fetchLatestInvoices(): Promise<LatestInvoice[]> {
+export async function fetchLatestInvoices() {
   try {
-    // REMOVED: userId parameter
-    const businessId = await getBusinessId();
+    const data = await sql<LatestInvoiceRaw[]>`
+      SELECT invoices.amount, customers.name, customers.image_url, customers.email, invoices.id
+      FROM invoices
+      JOIN customers ON invoices.customer_id = customers.id
+      ORDER BY invoices.date DESC
+      LIMIT 5`;
 
-    if (!businessId) {
-      console.warn(
-        `No business found for authenticated user. Returning empty list.`
-      );
-      return [];
-    }
-
-    const latestInvoicesData = await prisma.invoices.findMany({
-      where: {
-        businessId: businessId, // Filter by the user's business
-      },
-      orderBy: {
-        // Order by the due date in descending order (latest first)
-        createdAt: "desc",
-      },
-      take: 5, // Equivalent to SQL's LIMIT 5
-      include: {
-        // Include the related customer data (SQL JOIN)
-        customer: {
-          select: {
-            name: true,
-            email: true,
-            image_url: true,
-          },
-        },
-      },
-    });
-
-    const latestInvoices: LatestInvoice[] = latestInvoicesData.map(
-      (invoice) => ({
-        id: invoice.id,
-        amount: formatCurrency(invoice.amount),
-        name: invoice.customer!.name!,
-        email: invoice.customer!.email!,
-        image_url: invoice.customer!.image_url!,
-      })
-    );
-
+    const latestInvoices = data.map((invoice) => ({
+      ...invoice,
+      amount: formatCurrency(invoice.amount),
+    }));
     return latestInvoices;
   } catch (error) {
-    console.error("Database Error:", error);
-    throw new Error("Failed to fetch the latest invoices.");
-  }
-}
-
-export async function fetchChartInvoices(): Promise<ChartInvoice[]> {
-  try {
-    // REMOVED: userId parameter
-    const businessId = await getBusinessId();
-
-    if (!businessId) {
-      console.warn(
-        `No business found for authenticated user. Returning empty list.`
-      );
-      return [];
-    }
-
-    const chartInvoicesData = await prisma.invoices.findMany({
-      where: {
-        businessId: businessId, // Filter by the user's business
-      },
-      orderBy: {
-        // Order by the due date in descending order (latest first)
-        createdAt: "desc",
-      },
-      include: {
-        // Include the related customer data (SQL JOIN)
-        customer: {
-          select: {
-            name: true,
-            email: true,
-            image_url: true,
-          },
-        },
-      },
-    });
-
-    const chartInvoices: ChartInvoice[] = chartInvoicesData.map(
-      (invoice) => ({
-        amount: formatChartCurrency(invoice.amount),
-        date: invoice.dueDate!,
-        type: invoice.invType,
-      })
-    );
-
-    return chartInvoices;
-  } catch (error) {
-    console.error("Database Error:", error);
-    throw new Error("Failed to fetch the latest invoices.");
+    console.error('Database Error:', error);
+    throw new Error('Failed to fetch the latest invoices.');
   }
 }
 
 export async function fetchCardData() {
   try {
-    // REMOVED: userId parameter
-    const businessId = await getBusinessId();
+    // You can probably combine these into a single SQL query
+    // However, we are intentionally splitting them to demonstrate
+    // how to initialize multiple queries in parallel with JS.
+    const invoiceCountPromise = sql`SELECT COUNT(*) FROM invoices`;
+    const customerCountPromise = sql`SELECT COUNT(*) FROM customers`;
+    const invoiceStatusPromise = sql`SELECT
+         SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END) AS "paid",
+         SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) AS "pending"
+         FROM invoices`;
 
-    const zeroMetrics = {
-      numberOfCustomers: 0,
-      numberOfInvoices: 0,
-      totalPaidInvoices: 0,
-      totalPendingInvoices: 0,
-      numberOfOverdueInvoices: 0,
-    };
-
-    if (!businessId) {
-      console.warn(
-        `No business found for authenticated user. Returning zero metrics.`
-      );
-      return zeroMetrics;
-    }
-
-    // 2. Initialize multiple Prisma count queries in parallel
-    const promiseCustomers = prisma.customers.count({
-      where: { businessId: businessId },
-    });
-
-    const promiseInvoices = prisma.invoices.count({
-      where: { businessId: businessId },
-    });
-
-    const promiseOverdueInvoices = prisma.invoices.count({
-      where: { businessId: businessId, status: "OVERDUE" },
-    });
-
-    // Count of 'PAID' invoices
-    const promisePaidInvoices = prisma.invoices.count({
-      where: { businessId: businessId, status: "PAID" },
-    });
-
-    // Count of 'PENDING' invoices
-    const promisePendingInvoices = prisma.invoices.count({
-      where: { businessId: businessId, status: "PENDING" },
-    });
-
-    // 3. Wait for all promises to resolve
     const data = await Promise.all([
-      promiseCustomers,
-      promiseInvoices,
-      promisePaidInvoices,
-      promisePendingInvoices,
-      promiseOverdueInvoices,
+      invoiceCountPromise,
+      customerCountPromise,
+      invoiceStatusPromise,
     ]);
 
-    // 4. Destructure the results
-    const [
-      numberOfCustomers,
-      numberOfInvoices,
-      totalPaidInvoices,
-      totalPendingInvoices,
-      numberOfOverdueInvoices,
-    ] = data;
+    const numberOfInvoices = Number(data[0].count ?? '0');
+    const numberOfCustomers = Number(data[1].count ?? '0');
+    const totalPaidInvoices = formatCurrency(data[2][0].paid ?? '0');
+    const totalPendingInvoices = formatCurrency(data[2][0].pending ?? '0');
 
-    // 5. Return the metrics
     return {
       numberOfCustomers,
       numberOfInvoices,
       totalPaidInvoices,
       totalPendingInvoices,
-      numberOfOverdueInvoices,
     };
   } catch (error) {
-    console.error("Database Error:", error);
-    throw new Error("Failed to fetch card data.");
+    console.error('Database Error:', error);
+    throw new Error('Failed to fetch card data.');
   }
 }
 
 const ITEMS_PER_PAGE = 6;
 export async function fetchFilteredInvoices(
-  query: string, // REMOVED: userId parameter
-  currentPage: number
-): Promise<InvoicesTable[]> {
-  const businessId = await getBusinessId(); // Now called without argument
-  if (!businessId) return [];
-
+  query: string,
+  currentPage: number,
+) {
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
-  // NOTE: Assuming query search for amount is done on an integer (cents)
-  const amountInt = isNaN(parseInt(query)) ? undefined : parseInt(query);
 
   try {
-    const invoices = await prisma.invoices.findMany({
-      where: {
-        businessId: businessId, // Filter by business
-        OR: [
-          // Search by customer fields (via relation)
-          { customer: { name: { contains: query, mode: "insensitive" } } },
-          { customer: { email: { contains: query, mode: "insensitive" } } },
-          // Search by invoice fields
-          { number: { contains: query, mode: "insensitive" } },
-          // { status: { contains: query, mode: 'insensitive' } },
-          // Search by amount (only for exact integer match in cents)
-          { amount: amountInt },
-        ],
-      },
-      take: ITEMS_PER_PAGE,
-      skip: offset,
-      orderBy: {
-        dueDate: "desc",
-      },
-      select: {
-        id: true,
-        amount: true,
-        status: true,
-        customerId: true,
-        dueDate: true, // Keep the Date object here
-        customer: {
-          select: {
-            name: true,
-            email: true,
-            image_url: true,
-          },
-        },
-      },
-    });
+    const invoices = await sql<InvoicesTable[]>`
+      SELECT
+        invoices.id,
+        invoices.amount,
+        invoices.date,
+        invoices.status,
+        customers.name,
+        customers.email,
+        customers.image_url
+      FROM invoices
+      JOIN customers ON invoices.customer_id = customers.id
+      WHERE
+        customers.name ILIKE ${`%${query}%`} OR
+        customers.email ILIKE ${`%${query}%`} OR
+        invoices.amount::text ILIKE ${`%${query}%`} OR
+        invoices.date::text ILIKE ${`%${query}%`} OR
+        invoices.status ILIKE ${`%${query}%`}
+      ORDER BY invoices.date DESC
+      LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}
+    `;
 
-    // Map and format for the final output
-    return invoices.map((invoice) => ({
-      id: invoice.id,
-      amount: invoice.amount,
-      status: invoice.status as "PENDING" | "PAID",
-      dueDate: invoice.dueDate,
-      name: invoice.customer!.name!,
-      customer_id: invoice.customerId,
-      email: invoice.customer!.email!,
-      image_url: invoice.customer!.image_url!,
-    })) as InvoicesTable[];
+    return invoices;
   } catch (error) {
-    console.error("Database Error:", error);
-    throw new Error("Failed to fetch invoices.");
-  }
-}
-
-export async function fetchInvoices(): Promise<InvoicesTable[]> {
-  const businessId = await getBusinessId(); // Now called without argument
-  if (!businessId) return [];
-
-  try {
-    const invoices = await prisma.invoices.findMany({
-      where: {
-        businessId: businessId,
-      },
-      orderBy: {
-        dueDate: "desc",
-      },
-      select: {
-        id: true,
-        amount: true,
-        status: true,
-        customerId: true,
-        dueDate: true, // Keep the Date object here
-        customer: {
-          select: {
-            name: true,
-            email: true,
-            image_url: true,
-          },
-        },
-      },
-    });
-
-    // Map and format for the final output
-    return invoices.map((invoice) => ({
-      id: invoice.id,
-      amount: invoice.amount,
-      status: invoice.status as "PENDING" | "PAID",
-      dueDate: invoice.dueDate,
-      name: invoice.customer!.name!,
-      customer_id: invoice.customerId,
-      email: invoice.customer!.email!,
-      image_url: invoice.customer!.image_url!,
-    })) as InvoicesTable[];
-  } catch (error) {
-    console.error("Database Error:", error);
-    throw new Error("Failed to fetch invoices.");
+    console.error('Database Error:', error);
+    throw new Error('Failed to fetch invoices.');
   }
 }
 
 export async function fetchInvoicesPages(query: string) {
-  const businessId = await getBusinessId(); // Now called without argument
-  if (!businessId) return 0;
-
-  const amountInt = isNaN(parseInt(query)) ? undefined : parseInt(query);
-
   try {
-    const count = await prisma.invoices.count({
-      where: {
-        businessId: businessId,
-        OR: [
-          { customer: { name: { contains: query, mode: "insensitive" } } },
-          { customer: { email: { contains: query, mode: "insensitive" } } },
-          { number: { contains: query, mode: "insensitive" } },
-          // { status: { contains: query, mode: 'insensitive' } },
-          { amount: amountInt },
-        ],
-      },
-    });
+    const data = await sql`SELECT COUNT(*)
+    FROM invoices
+    JOIN customers ON invoices.customer_id = customers.id
+    WHERE
+      customers.name ILIKE ${`%${query}%`} OR
+      customers.email ILIKE ${`%${query}%`} OR
+      invoices.amount::text ILIKE ${`%${query}%`} OR
+      invoices.date::text ILIKE ${`%${query}%`} OR
+      invoices.status ILIKE ${`%${query}%`}
+  `;
 
-    const totalPages = Math.ceil(Number(count) / ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(Number(data[0].count) / ITEMS_PER_PAGE);
     return totalPages;
   } catch (error) {
-    console.error("Database Error:", error);
-    throw new Error("Failed to fetch total number of invoices.");
+    console.error('Database Error:', error);
+    throw new Error('Failed to fetch total number of invoices.');
   }
 }
 
 export async function fetchInvoiceById(id: string) {
-  const businessId = await getBusinessId(); // Now called without argument
-  if (!businessId) return undefined;
-
   try {
-    const invoice = await prisma.invoices.findUnique({
-      where: {
-        id: id,
-        businessId: businessId,
-      },
-      select: {
-        id: true,
-        customerId: true,
-        amount: true,
-        status: true,
-        dueDate: true,
-      },
-    });
+    const data = await sql<InvoiceForm[]>`
+      SELECT
+        invoices.id,
+        invoices.customer_id,
+        invoices.amount,
+        invoices.status
+      FROM invoices
+      WHERE invoices.id = ${id};
+    `;
 
-    if (!invoice) {
-      return undefined;
-    }
-
-    // Convert amount from cents to dollars for the form
-    return {
-      id: invoice.id,
-      customer_id: invoice.customerId,
+    const invoice = data.map((invoice) => ({
+      ...invoice,
+      // Convert amount from cents to dollars
       amount: invoice.amount / 100,
-      status: invoice.status,
-      dueDate: invoice.dueDate,
-    } as InvoiceForm;
+    }));
+
+    return invoice[0];
   } catch (error) {
-    console.error("Database Error:", error);
-    throw new Error("Failed to fetch invoice.");
+    console.error('Database Error:', error);
+    throw new Error('Failed to fetch invoice.');
   }
 }
 
 export async function fetchCustomers() {
-  const businessId = await getBusinessId(); // Now called without argument
-  if (!businessId) return [];
-
   try {
-    const customers = await prisma.customers.findMany({
-      where: {
-        businessId: businessId,
-      },
-      select: {
-        id: true,
-        name: true,
-      },
-      orderBy: {
-        name: "asc",
-      },
-    });
-    return customers as CustomerField[];
-  } catch (err) {
-    console.error("Database Error:", err);
-    throw new Error("Failed to fetch all customers.");
-  }
-}
-
-export async function fetchCustomersPages(query: string) {
-  const businessId = await getBusinessId(); // Now called without argument
-
-  if (!businessId) {
-    return 0;
-  }
-
-  try {
-    // Use prisma.customers.count() - pure ORM, no raw SQL necessary
-    const count = await prisma.customers.count({
-      where: {
-        businessId: businessId, // 1. Multi-tenancy filter
-        OR: [
-          // 2. Search by name
-          {
-            name: {
-              contains: query,
-              mode: "insensitive", // PostgreSQL's ILIKE is handled by 'mode: insensitive'
-            },
-          },
-          // 3. Search by email
-          {
-            email: {
-              contains: query,
-              mode: "insensitive",
-            },
-          },
-        ],
-      },
-    });
-
-    // Calculate total pages
-    const totalPages = Math.ceil(Number(count) / ITEMS_PER_PAGE);
-    return totalPages;
-  } catch (error) {
-    console.error("Database Error:", error);
-    throw new Error("Failed to fetch total number of customers.");
-  }
-}
-
-export async function fetchFilteredCustomers(
-  query: string, // REMOVED: userId parameter
-  currentPage: number
-) {
-  const businessId = await getBusinessId(); // Now called without argument
-  if (!businessId) return [];
-
-  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
-
-  try {
-    // 1. Fetch customers, filtered and paginated, with all related invoices
-    const customersWithInvoices = await prisma.customers.findMany({
-      where: {
-        businessId: businessId, // Multi-tenancy filter
-        OR: [
-          // Filter customers by name or email
-          { name: { contains: query, mode: "insensitive" } },
-          { email: { contains: query, mode: "insensitive" } },
-        ],
-      },
-      // Pagination and Ordering
-      skip: offset,
-      take: ITEMS_PER_PAGE,
-      orderBy: {
-        name: "asc",
-      },
-      // Include related invoices to perform aggregation in memory
-      include: {
-        invoices: {
-          select: {
-            id: true,
-            status: true,
-            amount: true,
-          },
-        },
-      },
-    });
-
-    // 2. Perform aggregation (the equivalent of SQL's GROUP BY and SUM(CASE WHEN...))
-    const customers = customersWithInvoices.map((customer) => {
-      const total_invoices = customer.invoices.length;
-      let total_pending_raw = 0; // In cents/minor units
-      let total_paid_raw = 0; // In cents/minor units
-
-      customer.invoices.forEach((invoice) => {
-        if (invoice.status === "PENDING") {
-          total_pending_raw += invoice.amount;
-        } else if (invoice.status === "PAID") {
-          total_paid_raw += invoice.amount;
-        }
-      });
-
-      // 3. Map to the final expected output format (CustomersTableType)
-      return {
-        id: customer.id,
-        name: customer.name,
-        email: customer.email,
-        image_url: customer.image_url!,
-        total_invoices: total_invoices, // Raw number
-
-        // Format currency for the final output string, as required by the mapping
-        total_pending: formatCurrency(total_pending_raw),
-        total_paid: formatCurrency(total_paid_raw),
-      };
-    });
+    const customers = await sql<CustomerField[]>`
+      SELECT
+        id,
+        name
+      FROM customers
+      ORDER BY name ASC
+    `;
 
     return customers;
   } catch (err) {
-    console.error("Database Error:", err);
-    throw new Error("Failed to fetch customer table.");
+    console.error('Database Error:', err);
+    throw new Error('Failed to fetch all customers.');
   }
 }
 
-// ----------------------------------------------------\
-// DATA FETCHING: Monthly Revenue
-// ----------------------------------------------------\
-/**
- * Fetches the total paid invoice revenue for the last 12 months,
- * aggregated by month and year.
- * @returns {Array<{month: string, revenue: number}>} An array of monthly revenue objects.
- */
-export async function fetchMonthlyRevenue(): Promise<
-  { month: string; revenue: number }[]
-> {
+export async function fetchFilteredCustomers(query: string) {
   try {
-    const businessId = await getBusinessIdFromAuth();
-    if (!businessId) {
-      return [];
-    }
+    const data = await sql<CustomersTableType[]>`
+		SELECT
+		  customers.id,
+		  customers.name,
+		  customers.email,
+		  customers.image_url,
+		  COUNT(invoices.id) AS total_invoices,
+		  SUM(CASE WHEN invoices.status = 'pending' THEN invoices.amount ELSE 0 END) AS total_pending,
+		  SUM(CASE WHEN invoices.status = 'paid' THEN invoices.amount ELSE 0 END) AS total_paid
+		FROM customers
+		LEFT JOIN invoices ON customers.id = invoices.customer_id
+		WHERE
+		  customers.name ILIKE ${`%${query}%`} OR
+        customers.email ILIKE ${`%${query}%`}
+		GROUP BY customers.id, customers.name, customers.email, customers.image_url
+		ORDER BY customers.name ASC
+	  `;
 
-    // Calculate the date 12 months ago to limit the query scope
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
-    twelveMonthsAgo.setDate(1); // Set to the first day of the month
+    const customers = data.map((customer) => ({
+      ...customer,
+      total_pending: formatCurrency(customer.total_pending),
+      total_paid: formatCurrency(customer.total_paid),
+    }));
 
-    // 1. Fetch all paid invoices for the last 12 months
-    // NOTE: This assumes an invoice table has a field named 'date' (DateTime type)
-    const paidInvoices = await prisma.invoices.findMany({
-      where: {
-        businessId: businessId,
-        status: "PAID",
-        dueDate: {
-          gte: twelveMonthsAgo,
-        },
-      },
-      select: {
-        dueDate: true,
-        amount: true,
-      },
-      orderBy: {
-        dueDate: "asc",
-      },
-    });
-
-    // 2. Aggregate in memory (safer than raw SQL)
-    const monthlyDataMap = new Map<string, number>();
-
-    paidInvoices.forEach((invoice) => {
-      const date = invoice.dueDate;
-      // Create a unique key: YYYY-MM (e.g., '2025-03')
-      const yearMonthKey = `${date!.getFullYear()}-${(date!.getMonth() + 1)
-        .toString()
-        .padStart(2, "0")}`;
-
-      const currentRevenue = monthlyDataMap.get(yearMonthKey) || 0;
-      monthlyDataMap.set(yearMonthKey, currentRevenue + invoice.amount);
-    });
-
-    // 3. Format the map into the final array structure
-    const monthlyRevenue = Array.from(monthlyDataMap.entries()).map(
-      ([yearMonth, revenue]) => {
-        const [year, month] = yearMonth.split("-");
-
-        // Convert month number (01-12) to short name (Jan-Dec)
-        const monthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-        const shortMonthName = monthDate.toLocaleString("default", {
-          month: "short",
-        });
-
-        return {
-          month: shortMonthName,
-          revenue: revenue, // Revenue in cents/minor units
-        };
-      }
-    );
-
-    return monthlyRevenue;
-  } catch (error) {
-    console.error("Database Error: Failed to fetch monthly revenue.", error);
-    return [];
+    return customers;
+  } catch (err) {
+    console.error('Database Error:', err);
+    throw new Error('Failed to fetch customer table.');
   }
 }

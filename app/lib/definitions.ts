@@ -33,16 +33,10 @@ export type Revenue = {
 
 export type LatestInvoice = {
   id: string;
-  amount: string;
   name: string;
   image_url: string;
   email: string;
-};
-
-export type ChartInvoice = {
-  amount: number;
-  date: Date;
-  type: "SENT" | "RECEIVED"
+  amount: string;
 };
 
 // The database returns a number for amount, but we later format it to a string with the formatCurrency function
@@ -56,9 +50,9 @@ export type InvoicesTable = {
   name: string;
   email: string;
   image_url: string;
-  dueDate: Date;
+  date: string;
   amount: number;
-  status: 'PENDING' | 'PAID' | 'OVERDUE';
+  status: 'pending' | 'paid';
 };
 
 export type CustomersTableType = {
@@ -90,27 +84,5 @@ export type InvoiceForm = {
   id: string;
   customer_id: string;
   amount: number;
-  status: 'PENDING' | 'PAID';
-  dueDate: Date;
-  type: 'SENT' | 'RECEIVED';
-};
-
-export type CustomerAnalytics = {
-  id: string;
-  name: string;
-  email: string;
-  image_url: string;
-  total_invoices: number;
-  total_pending: number;
-  total_paid: number;
-};
-
-export type CustomerPageAnalytics = {
-  id: string;
-  name: string;
-  email: string;
-};
-
-export type CountResult = {
-  count: string | number;
+  status: 'pending' | 'paid';
 };

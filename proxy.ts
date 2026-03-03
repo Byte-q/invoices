@@ -1,9 +1,16 @@
-import NextAuth from 'next-auth';
-import { authConfig } from './auth.config';
+import { withAuth } from "@kinde-oss/kinde-auth-nextjs/middleware";
 
-export default NextAuth(authConfig).auth;
+export default withAuth(
+  async function middleware(req: Request) {
+  },
+  {
+    // Middleware still runs on all routes, but doesn't protect the home route
+    publicPaths: ["/"], // e.g. ["/api/public", "/blog", "/about"]
+  }
+);
 
 export const config = {
-  // https://nextjs.org/docs/app/building-your-application/routing/middleware#matcher
-  matcher: ['/((?!api|_next/static|_next/image|.*\\.png$).*)'],
-};
+  matcher: [
+    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+  ],
+}
